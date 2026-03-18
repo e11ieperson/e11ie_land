@@ -124,7 +124,7 @@ def read_from_port():
 def main():
     global ser
     print("Looking for Arduino serial port...")
-    port_name = find_serial_port()
+    port_name = "COM13" #find_serial_port()
     
     if not port_name:
         print("No serial ports found! Please plug in your device.")

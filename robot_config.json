@@ -1,7 +1,7 @@
 {
     "controllers": {
         "base": {
-            "port": "COM7",
+            "port": "COM12",
             "motors": [
                 1,
                 2,
@@ -9,17 +9,21 @@
             ]
         },
         "joint4": {
-            "port": "COM15",
+            "port": "COM14",
             "motors": [
                 4
             ]
         },
         "wrist": {
-            "port": "COM14",
-            "motors": [
-                5,
-                6
-            ]
+            "port": "COM13",
+            "motors": [5, 6],
+            "hand": {
+                "enabled": true,
+                "open_cmd": "HAND_OPEN",
+                "close_cmd": "HAND_CLOSE",
+                "stop_cmd": "HAND_STOP"
+            }
+
         }
     },
     "motors": {
@@ -77,7 +81,7 @@
             "min_angle": -90.0,
             "max_angle": 125.0,
             "zero_offset": 0.0,
-            "abs_zero_offset": 112.4,
+            "abs_zero_offset": 24.7,
             "abs_encoder_index": 1,
             "abs_encoder_reversed": true,
             "abs_pid_enabled": true,
@@ -105,7 +109,7 @@
         },
         "5": {
             "type": "M2006",
-            "gear_ratio": 1.0,
+            "gear_ratio": 10.0,
             "kp": 5.0,
             "ki": 1.0,
             "kd": 0.0,
@@ -124,7 +128,7 @@
         },
         "6": {
             "type": "M2006",
-            "gear_ratio": 1.0,
+            "gear_ratio": 10.0,
             "kp": 5.0,
             "ki": 1.0,
             "kd": 0.0,

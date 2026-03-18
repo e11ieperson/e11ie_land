@@ -642,8 +642,8 @@ class DashboardWindow(QMainWindow):
         return tuple(states)
 
     def _init_backend(self):
-        backend.load_robot_config()
         try:
+            backend.load_robot_config()
             with open(backend.URDF_FILE, "r", encoding="utf-8") as f:
                 urdf_data = f.read().replace('type="continuous"', 'type="revolute"')
             with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".urdf", encoding="utf-8") as temp_urdf:
@@ -664,7 +664,13 @@ class DashboardWindow(QMainWindow):
             backend.planar_target_y = float(backend.current_target_xyz[1])
         except Exception as exc:
             traceback.print_exc()
-            raise RuntimeError(f"Failed to initialize IK backend: {exc}")
+            self._append_log(f"Backend init warning: {exc}")
+            # Keep the UI alive so users can adjust connection settings and retry.
+            try:
+                if getattr(backend, "current_joint_angles", None) is None:
+                    backend.current_joint_angles = [0.0] * 7
+            except Exception:
+                pass
 
     def _build_ui(self):
         root = QWidget()
@@ -763,6 +769,11 @@ class DashboardWindow(QMainWindow):
         self.btn_verify_apply = QPushButton("Post-Reconnect Verify + Arm Motion")
         self.btn_verify_apply.clicked.connect(self.log_runtime_apply_plan)
         controls_layout.addWidget(self.btn_verify_apply, 8, 0, 1, 2)
+
+        self.chk_allow_partial_connect = QCheckBox("Allow Partial Controller Connect")
+        self.chk_allow_partial_connect.setChecked(True)
+        self.chk_allow_partial_connect.setToolTip("If enabled, dashboard runs even if only some controllers connect.")
+        controls_layout.addWidget(self.chk_allow_partial_connect, 9, 0, 1, 2)
 
         status_group = QGroupBox("Link Status")
         status_layout = QVBoxLayout(status_group)
@@ -1031,9 +1042,42 @@ class DashboardWindow(QMainWindow):
 
     def _connect_serial_passive(self):
         was_connected = self._backend_connected()
-        ok = backend.connect_serial(perform_startup_actions=False)
+        try:
+            ok = backend.connect_serial(perform_startup_actions=False)
+        except Exception as exc:
+            self._append_log(f"Serial connect failed: {exc}")
+            return False
         if not ok:
             return False
+
+        allow_partial = True
+        if hasattr(self, "chk_allow_partial_connect"):
+            allow_partial = bool(self.chk_allow_partial_connect.isChecked())
+        if not allow_partial:
+            serial_map = getattr(backend, "controller_serial", {}) or {}
+            connected = {
+                str(name)
+                for name, conn in serial_map.items()
+                if conn and getattr(conn, "is_open", False)
+            }
+            cfg_map = getattr(backend, "controller_map", {}) or {}
+            required = set()
+            if isinstance(cfg_map, dict):
+                for name, cfg in cfg_map.items():
+                    if not isinstance(cfg, dict):
+                        continue
+                    port = str(cfg.get("port", "") or "").strip().upper()
+                    if port and port != "COM0":
+                        required.add(str(name))
+            missing = sorted(required - connected)
+            if missing:
+                backend.disconnect_serial()
+                self._append_log(
+                    "Strict connect mode blocked startup; missing controller(s): "
+                    + ", ".join(missing)
+                )
+                return False
+
         backend.send_command("S; TON")
         self._engage_motion_safety_lock("serial connect")
         if backend.wait_for_telemetry(timeout_sec=1.5):

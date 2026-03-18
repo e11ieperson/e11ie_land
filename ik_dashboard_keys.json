@@ -1,6 +1,6 @@
 {
   "move_x_neg": "D",
-  "move_x_pos": "A",
+  "move_x_pos": "F",
   "move_y_pos": "None",
   "move_y_neg": "None",
   "move_z_neg": "S",
@@ -18,7 +18,7 @@
   "execute": "Space",
   "estop": "X",
   "preview": "P",
-  "sync_target": "C",
+  "sync_target": "T",
   "hand_open": "T",
   "hand_close": "G"
 }

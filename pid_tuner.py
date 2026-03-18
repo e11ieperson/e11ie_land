@@ -1707,13 +1707,20 @@ class PIDTunerApp:
         if self._connected_controller_names():
             self.disconnect_serial()
         else:
-            assignments = self._ordered_controller_ports()
+            try:
+                assignments = self._ordered_controller_ports()
+            except Exception as e:
+                messagebox.showerror("Connection Error", f"Failed while enumerating serial ports:\n{e}")
+                return
+
             if not assignments:
                 messagebox.showerror("No Device", "Could not find a connected Arduino device.")
                 return
 
-            try:
-                for name, port in assignments:
+            connected = []
+            failures = []
+            for name, port in assignments:
+                try:
                     conn = serial.Serial(port, BAUD_RATE, timeout=0.1)
                     time.sleep(2)
                     self.controller_ports[name] = port
@@ -1723,21 +1730,31 @@ class PIDTunerApp:
                     tx = threading.Thread(target=self.command_tx_loop, args=(name,), daemon=True)
                     self.controller_tx_threads[name] = tx
                     tx.start()
-                self._sync_legacy_serial_ref()
-                self.btn_connect.config(text="Disconnect")
-                self.lbl_status.config(text=f"Connected ({', '.join(f'{name}:{self.controller_ports[name]}' for name, _ in assignments)})", foreground="green")
-                self.refresh_controller_port_status()
+                    connected.append((name, port))
+                except Exception as e:
+                    failures.append((name, port, str(e)))
 
-                # TON is idempotent (unlike T toggle) - safe to call on every connect
-                self.send_command("TON")
+            if not connected:
+                self.disconnect_serial()
+                details = "\n".join(f"- {name}:{port} -> {err}" for name, port, err in failures) if failures else "No controllers opened."
+                messagebox.showerror("Connection Error", f"Could not connect to any controllers:\n{details}")
+                return
 
+            self._sync_legacy_serial_ref()
+            self.btn_connect.config(text="Disconnect")
+            self.lbl_status.config(text=f"Connected ({', '.join(f'{name}:{port}' for name, port in connected)})", foreground="green")
+            self.refresh_controller_port_status()
+
+            # TON is idempotent (unlike T toggle) - safe to call on every connect
+            self.send_command("TON")
+
+            if failures:
+                failed_names = ", ".join(f"{name}:{port}" for name, port, _ in failures)
+                self.status_bar.config(text=f"Connected to {len(connected)} controller(s). Failed: {failed_names}")
+            else:
                 # Do not auto-apply file settings on connect.
                 # Bad saved values can make motors appear dead until power cycle.
                 self.status_bar.config(text="Connected to controller set. Live control ready. Use 'Apply ALL' only after reviewing values.")
-
-            except Exception as e:
-                messagebox.showerror("Connection Error", f"Could not connect to controllers:\n{e}")
-                self.disconnect_serial()
 
     @staticmethod
     def _safe_float(value):
@@ -1748,6 +1765,13 @@ class PIDTunerApp:
         if math.isnan(f) or math.isinf(f):
             return None
         return f
+
+    @staticmethod
+    def _safe_int(value, default=None):
+        try:
+            return int(value)
+        except Exception:
+            return default
 
     def _handle_abspid_skip_warning(self, controller_name, line):
         m = re.search(r"M(\d+)\s+ABSPID\s+skipped:\s*(.+)$", line)
@@ -1910,14 +1934,18 @@ class PIDTunerApp:
 
     def get_wrist_telemetry_snapshot(self):
         cfg = self.config.get("wrist_differential", {})
-        pitch_mid = str(int(cfg.get("pitch_encoder_motor_id", 5)))
-        roll_mid = str(int(cfg.get("roll_encoder_motor_id", 6)))
-        pitch_joint = str(int(cfg.get("pitch_joint_id", 5)))
-        roll_joint = str(int(cfg.get("roll_joint_id", 6)))
+        pitch_mid = str(self._safe_int(cfg.get("pitch_encoder_motor_id", 5), 5))
+        roll_mid = str(self._safe_int(cfg.get("roll_encoder_motor_id", 6), 6))
+        pitch_joint = str(self._safe_int(cfg.get("pitch_joint_id", 5), 5))
+        roll_joint = str(self._safe_int(cfg.get("roll_joint_id", 6), 6))
         pitch_raw = self.latest_telemetry.get(pitch_mid, {}).get("apos")
         roll_raw = self.latest_telemetry.get(roll_mid, {}).get("apos")
-        pitch_zero = float(self.config.get("motors", {}).get(pitch_joint, {}).get("abs_zero_offset", 0.0))
-        roll_zero = float(self.config.get("motors", {}).get(roll_joint, {}).get("abs_zero_offset", 0.0))
+        pitch_zero = self._safe_float(self.config.get("motors", {}).get(pitch_joint, {}).get("abs_zero_offset", 0.0))
+        roll_zero = self._safe_float(self.config.get("motors", {}).get(roll_joint, {}).get("abs_zero_offset", 0.0))
+        if pitch_zero is None:
+            pitch_zero = 0.0
+        if roll_zero is None:
+            roll_zero = 0.0
         motor_a_logical = None if pitch_raw is None else pitch_raw - pitch_zero
         motor_b_logical = None if roll_raw is None else roll_raw - roll_zero
         mix_cfg = cfg.get("mix", {}) if isinstance(cfg.get("mix"), dict) else {}
@@ -1928,8 +1956,8 @@ class PIDTunerApp:
             pitch, roll = invert_wrist_mix(motor_a_logical, motor_b_logical, mix_cfg)
         pitch_target = self.wrist_diff_target_logical_deg.get("pitch")
         roll_target = self.wrist_diff_target_logical_deg.get("roll")
-        motor_a_mid = str(int(cfg.get("motor_a_id", 5)))
-        motor_b_mid = str(int(cfg.get("motor_b_id", 6)))
+        motor_a_mid = str(self._safe_int(cfg.get("motor_a_id", 5), 5))
+        motor_b_mid = str(self._safe_int(cfg.get("motor_b_id", 6), 6))
         return {
             "pitch": pitch,
             "roll": roll,

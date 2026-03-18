@@ -6,32 +6,32 @@
     "1": {
       "forward": "1",
       "reverse": "q",
-      "speed": 50
+      "speed": 20
     },
     "2": {
       "forward": "2",
       "reverse": "w",
-      "speed": 50
+      "speed": 20
     },
     "3": {
       "forward": "3",
       "reverse": "e",
-      "speed": 50
+      "speed": 20
     },
     "4": {
       "forward": "4",
       "reverse": "r",
-      "speed": 50
+      "speed": 20
     },
     "5": {
       "forward": "5",
       "reverse": "t",
-      "speed": 50
+      "speed": 20
     },
     "6": {
       "forward": "6",
       "reverse": "y",
-      "speed": 50
+      "speed": 20
     }
   }
 }

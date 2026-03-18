@@ -1261,7 +1261,13 @@ def find_serial_port():
 
 
 def _connect_single_controller(controller_name, port_name):
-    conn = serial.Serial(port_name, BAUD_RATE, timeout=0.1)
+    try:
+        conn = serial.Serial(port_name, BAUD_RATE, timeout=0.1)
+    except Exception as exc:
+        msg = str(exc)
+        if "SetCommState" in msg or "PermissionError" in msg:
+            msg += " (port busy or invalid; ensure no other app has this COM port open)"
+        raise RuntimeError(f"{controller_name}:{port_name} open failed: {msg}") from exc
     time.sleep(2)
     controller_ports[controller_name] = port_name
     controller_serial[controller_name] = conn
@@ -1290,13 +1296,28 @@ def connect_serial(perform_startup_actions=True):
         update_connection_button()
         return False
 
+    connected = []
+    failures = []
     try:
         for controller_name, port_name in assignments:
             print(f"Connecting {controller_name} controller to {port_name}...")
-            _connect_single_controller(controller_name, port_name)
-        expected_controller_names = {name for name, _ in assignments}
+            try:
+                _connect_single_controller(controller_name, port_name)
+                connected.append((controller_name, port_name))
+            except Exception as exc:
+                failures.append((controller_name, port_name, str(exc)))
+
+        if not connected:
+            for controller_name, port_name, err in failures:
+                print(f"Connect failed [{controller_name}:{port_name}] {err}")
+            update_connection_button()
+            return False
+
+        expected_controller_names = {name for name, _ in connected}
         _sync_legacy_serial_refs()
-        print(f"Connected controllers: {', '.join(f'{name}={controller_ports[name]}' for name, _ in assignments)}")
+        print(f"Connected controllers: {', '.join(f'{name}={controller_ports[name]}' for name, _ in connected)}")
+        for controller_name, port_name, err in failures:
+            print(f"Connect failed [{controller_name}:{port_name}] {err}")
 
         latest_motor_pos_deg.clear()
         latest_motor_apos_deg.clear()

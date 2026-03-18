@@ -13,7 +13,7 @@ except ImportError:
 
 # Configuration
 BAUD_RATE = 115200
-MOTOR_ID = 5
+MOTOR_ID = 3
 SPEED = 50
 
 ser = None
@@ -94,7 +94,7 @@ def main():
     global ser
     print("Looking for Arduino serial port...")
     port_name = find_serial_port()
-   # port_name = "COM7"
+    port_name = "COM12"
     
     if not port_name:
         print("No serial ports found! Please plug in your device.")
